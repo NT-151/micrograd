@@ -1,5 +1,6 @@
 import torch
-from micrograd.engine import Value
+from engine import Value
+
 
 def test_sanity_check():
 
@@ -24,6 +25,7 @@ def test_sanity_check():
     assert ymg.data == ypt.data.item()
     # backward pass went well
     assert xmg.grad == xpt.grad.item()
+
 
 def test_more_ops():
 

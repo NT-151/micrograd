@@ -1,3 +1,6 @@
+import math
+import numpy as np
+
 
 class Value:
     """ stores a single scalar value and its gradient """
@@ -8,7 +11,7 @@ class Value:
         # internal variables used for autograd graph construction
         self._backward = lambda: None
         self._prev = set(_children)
-        self._op = _op # the op that produced this node, for graphviz / debugging / etc
+        self._op = _op  # the op that produced this node, for graphviz / debugging / etc
 
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
@@ -33,7 +36,8 @@ class Value:
         return out
 
     def __pow__(self, other):
-        assert isinstance(other, (int, float)), "only supporting int/float powers for now"
+        assert isinstance(other, (int, float)
+                          ), "only supporting int/float powers for now"
         out = Value(self.data**other, (self,), f'**{other}')
 
         def _backward():
@@ -51,11 +55,57 @@ class Value:
 
         return out
 
+    # fix dead neuron problem
+    def leaky_relu(self):
+        out = Value(self.data * 0.01 if self.data <=
+                    0 else self.data, (self,), 'ReLU')
+
+        def _backward():
+            self.grad += out.data * \
+                out.grad if out.data > 0 else (out.data * 0.01) * out.grad
+            # self.grad += (out.data * 0.01) * out.grad
+        out._backward = _backward
+
+        return out
+
+    def log(self):
+
+        out = Value(math.log(self.data), (self, ), 'log')
+
+        def _backward():
+            self.grad += (1 / self.data) * out.grad
+        out._backward = _backward
+
+        return out
+
+    def exp(self):
+        x = self.data
+        out = Value(math.exp(x), (self, ), 'exp')
+
+        def _backward():
+            self.grad += out.data * out.grad
+        out._backward = _backward
+
+        return out
+
+    def sigmoid(self):
+        x = self.data
+        t = 1 / (1 + (math.exp(-x)))
+
+        out = Value(t, (self, ), 'sigmoid')
+
+        def _backward():
+            self.grad += (out.data * (1 - out.data)) * out.grad
+        out._backward = _backward
+
+        return out
+
     def backward(self):
 
         # topological order all of the children in the graph
         topo = []
         visited = set()
+
         def build_topo(v):
             if v not in visited:
                 visited.add(v)
@@ -69,25 +119,37 @@ class Value:
         for v in reversed(topo):
             v._backward()
 
-    def __neg__(self): # -self
+    def __ge__(self, other):
+        return self.data >= other.data
+
+    def __le__(self, other):
+        return self.data <= other.data
+
+    def __gt__(self, other):
+        return self.data > other.data
+
+    def __lt__(self, other):
+        return self.data < other.data
+
+    def __neg__(self):  # -self
         return self * -1
 
-    def __radd__(self, other): # other + self
+    def __radd__(self, other):  # other + self
         return self + other
 
-    def __sub__(self, other): # self - other
+    def __sub__(self, other):  # self - other
         return self + (-other)
 
-    def __rsub__(self, other): # other - self
+    def __rsub__(self, other):  # other - self
         return other + (-self)
 
-    def __rmul__(self, other): # other * self
+    def __rmul__(self, other):  # other * self
         return self * other
 
-    def __truediv__(self, other): # self / other
+    def __truediv__(self, other):  # self / other
         return self * other**-1
 
-    def __rtruediv__(self, other): # other / self
+    def __rtruediv__(self, other):  # other / self
         return other * self**-1
 
     def __repr__(self):
