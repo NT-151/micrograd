@@ -57,15 +57,13 @@ class Value:
 
     # fix dead neuron problem
     def leaky_relu(self):
-        out = Value(self.data * 0.01 if self.data <=
+        out = Value(self.data * 0.01 if self.data <
                     0 else self.data, (self,), 'ReLU')
 
         def _backward():
-            self.grad += out.data * \
-                out.grad if out.data > 0 else (out.data * 0.01) * out.grad
-            # self.grad += (out.data * 0.01) * out.grad
+            local_grad = 1.0 if self.data > 0 else 0.01
+            self.grad += local_grad * out.grad
         out._backward = _backward
-
         return out
 
     def log(self):
@@ -90,7 +88,7 @@ class Value:
 
     def sigmoid(self):
         x = self.data
-        t = 1 / (1 + (math.exp(-x)))
+        t = 1 / (1 + (np.exp(-x)))
 
         out = Value(t, (self, ), 'sigmoid')
 
