@@ -21,16 +21,21 @@ class Module:
 
 class Neuron(Module):
 
+    # I want to introduce weight sharing, which means I need to be able to
+    # initialise a neuron with pre defined weights, but leave the bias?
+
     def __init__(self, nin, nonlin=True, **kwargs):
         tied_weights = kwargs.get('tied_weights', None)
         self.w = tied_weights if tied_weights is not None else [
             Value(random.uniform(-1, 1)) for _ in range(nin)]
-        self.b = Value(random.uniform(-1, 1))
+        # self.b = Value(random.uniform(-1, 1))
+        self.b = Value(0)
         self.nonlin = nonlin
         self.activate = kwargs.get('activate', None)
 
     def __call__(self, x):
         if isinstance(x, (Value, float, int)):
+            # This is for a single input, likely at the start of a layer
             act = (self.w[0] * x) + self.b
         else:
             act = sum((wi*xi for wi, xi in zip(self.w, x)), self.b)
@@ -81,14 +86,14 @@ class Layer(Module):
                 else:
                     act = act.relu() if self.neurons[j].nonlin else act
                 out.append(act)
-            return out
+            return out[0] if len(out) == 1 else out
         else:
             # Standard layer behavior
             out = [n(x) for n in self.neurons]
             return out
 
     def parameters(self):
-        # weights are shared but not biases
+        # In a tied layer, the weights are shared, but the biases are not.
         if hasattr(self, 'tied_to_layer'):
             return [n.b for n in self.neurons]
         else:
@@ -103,11 +108,15 @@ class MLP(Module):
         sz = [nin] + nouts
         self.layers = []
         if tied_weights_from is None:
+            # Standard MLP initialization
             self.layers = [Layer(
                 sz[i], sz[i+1], nonlin=i != len(nouts)-1, **kwargs) for i in range(len(nouts))]
         else:
+            # Tied-weight MLP initialization
             tied_layers = list(reversed(tied_weights_from))
             for i in range(len(nouts)):
+                # Pass the encoder's layer directly to the decoder's layer.
+                # The decoder layer will use the encoder's weights.
                 self.layers.append(Layer(
                     sz[i], sz[i+1], tied_to_layer=tied_layers[i], nonlin=i != len(nouts)-1, **kwargs))
 
@@ -124,22 +133,27 @@ class MLP(Module):
 
 
 class AutoEncoder(Module):
-    def __init__(self, in_embeds, n_hidden_layers, compressed, act_func=None, tied=False):
-        n_hidden_layers = [math.ceil(in_embeds / i)
-                           for i in range(2, n_hidden_layers + 2)]
+    def __init__(self, in_embeds=1, hidden_layers=[], latent_dim=1, act_func=None, tied=False):
+        self.latent_dim = latent_dim
         self.act_func = act_func
-        self.encoder = MLP(in_embeds, n_hidden_layers + [compressed])
+        self.encoder = MLP(in_embeds, hidden_layers + [latent_dim])
+
+        # Create decoder, passing encoder layers for tied weights
         if tied:
-            self.decoder = MLP(compressed, list(reversed(n_hidden_layers)) +
-                               [in_embeds], tied_weights_from=self.encoder.layers, activate=act_func)
+            self.decoder = MLP(latent_dim, list(reversed(
+                hidden_layers)) + [in_embeds], tied_weights_from=self.encoder.layers, activate=act_func)
         else:
-            self.decoder = MLP(compressed, list(
-                reversed(n_hidden_layers)) + [in_embeds], activate=act_func)
+            self.decoder = MLP(latent_dim, list(
+                reversed(hidden_layers)) + [in_embeds], activate=act_func)
 
     def __call__(self, x):
         compressed = self.encoder(x)
         out = self.decoder(compressed)
         return out
+
+    def encode(self, x):
+        encoded = self.encoder(x)
+        return encoded
 
     def parameters(self):
         return self.encoder.parameters() + self.decoder.parameters()
@@ -155,7 +169,7 @@ class AutoEncoder(Module):
             return "no function"
 
     def __repr__(self):
-        return f"encoder has {self.summary()}, decoder has {self.summary()} activated with {self.pretty()}"
+        return f"encoder has {len(self.encoder.layers)}, decoder has {len(self.decoder.layers)}, latent dim is {self.latent_dim} activated with {self.pretty()}"
 
 
 class VariationalAutoEncoder(Module):
@@ -165,30 +179,32 @@ class VariationalAutoEncoder(Module):
     Uses reparameterization trick to sample from the latent distribution.
     """
 
-    def __init__(self, in_embeds, n_hidden_layers, latent_dim, act_func=None, tied=False):
-        n_hidden_layers = [math.ceil(in_embeds / i)
-                           for i in range(2, n_hidden_layers + 2)]
+    def __init__(self, in_embeds=1, hidden_layers=[], latent_dim=1, act_func=None, tied=False):
         self.latent_dim = latent_dim
         self.act_func = act_func
+
         # Encoder outputs 2 * latent_dim: mean and log-variance for each dimension
         # Last layer outputs 2*latent_dim (no activation on this layer)
-        self.encoder = MLP(in_embeds, n_hidden_layers + [2 * latent_dim])
+        self.encoder = MLP(in_embeds, hidden_layers + [2 * latent_dim])
+
         # Decoder takes latent_dim as input
         if tied:
             # For tied weights, we'd need to handle the 2*latent_dim -> latent_dim transition
             # For simplicity, we'll skip tied weights in VAE for now
             self.decoder = MLP(latent_dim, list(
-                reversed(n_hidden_layers)) + [in_embeds], activate=act_func)
+                reversed(hidden_layers)) + [in_embeds], activate=act_func)
         else:
             self.decoder = MLP(latent_dim, list(
-                reversed(n_hidden_layers)) + [in_embeds], activate=act_func)
+                reversed(hidden_layers)) + [in_embeds], activate=act_func)
 
     def encode(self, x):
         """Encode input to mean and log-variance"""
         encoded = self.encoder(x)
+
         # Ensure encoded is a list
         if not isinstance(encoded, list):
             encoded = [encoded]
+
         # Split the output into mean and log_var
         # encoded should be a list of 2*latent_dim values
         if len(encoded) != 2 * self.latent_dim:
