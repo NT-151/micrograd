@@ -24,6 +24,5 @@ class SGD(Optimizer):
     def step(self):
         """Update model parameters in the opposite direction of their gradient"""
 
-        if self.learning_rate > 0:  # Only update if the LR is positive
-            for p in self.parameters:
-                p.data -= self.learning_rate * p.grad
+        for p in self.parameters:
+            p.data -= self.learning_rate * p.grad
