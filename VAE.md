@@ -281,7 +281,7 @@ $$
 and
 
 $$
-q_\phi(z\mid x)=\mathcal{N}(\mu(x),\operatorname{diag}(\sigma^2(x)))
+q_\phi(z\mid x)=\mathcal{N}(\mu(x),\text{diag}(\sigma^2(x)))
 $$
 
 with $\mu$ and $\sigma$ coming from an encoder network:
@@ -293,7 +293,7 @@ $$
 In practice, we often parameterise with **log variance** for stability:
 
 $$
-\log\sigma^2 = {log\_var}
+\log\sigma^2 = {\log\text {var}}
 \quad\Rightarrow\quad
 \sigma = \exp(\frac{1}{2}\;log\_var)
 $$
@@ -319,7 +319,7 @@ $$
 For diagonal Gaussians:
 
 $$
-q_\phi(z\mid x)=\mathcal{N}(\mu(x),\operatorname{diag}(\sigma^2(x))),
+q_\phi(z\mid x)=\mathcal{N}(\mu(x),\text{diag}(\sigma^2(x))),
 \quad
 p_\theta(z)=\mathcal{N}(0,I)
 $$
@@ -332,13 +332,13 @@ D_{KL}\big(q_\phi(z\mid x)||p_\theta(z)\big)=
 }
 $$
 
-In ${log\_var}$ form $(\log\sigma_j^2 = {log\_var}_j$, $\sigma_j^2=\exp({log\_var}_j))$ this is commonly written as:
+In ${\log \text{var}}$ form $(\log\sigma_j^2 = {\log\text {var}}_j$, $\sigma_j^2=\exp({\log\text {var}}_j))$ this is commonly written as:
 
 $$
 \boxed{
 D_{KL}\!\left(q_\phi(z\mid x)||p_\theta(z)\right)=
 -\frac{1}{2}\sum_{j=1}^{d}
-\left(1+{log\_var}_j-\mu_j^2-\exp\!\left({log\_var}_j\right)\right)
+\left(1+{\log\text {var}}_j-\mu_j^2-\exp\!\left({\log\text {var}}_j\right)\right)
 }
 $$
 
@@ -413,7 +413,7 @@ I first implemented an AutoEncoder using MLPs. The architecture consists of an e
 
 I found the main differences were:
 
-- The encoder must output $\mu$ and ${log\_var}$ (or $\sigma)$ for each latent variable, so I doubled the size of compressed layer and split it into two heads
+- The encoder must output $\mu$ and ${\log\text {var}}$ (or $\sigma)$ for each latent variable, so I doubled the size of compressed layer and split it into two heads
 
 - Reparameterisation trick to sample latent vector which included $\epsilon$, treated as a constant during backprop
 
