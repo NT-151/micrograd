@@ -1,5 +1,10 @@
 import math
 import numpy as np
+import random
+
+np.random.seed(1337)
+random.seed(1337)
+np.set_printoptions(suppress=True)
 
 
 class Value:
@@ -12,6 +17,10 @@ class Value:
         self._backward = lambda: None
         self._prev = set(_children)
         self._op = _op  # the op that produced this node, for graphviz / debugging / etc
+
+    @classmethod
+    def constant(cls, data):
+        return cls(data, _op='constant')
 
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
@@ -30,7 +39,8 @@ class Value:
 
         def _backward():
             self.grad += other.data * out.grad
-            other.grad += self.data * out.grad
+            if other._op != 'constant':
+                other.grad += self.data * out.grad
         out._backward = _backward
 
         return out
@@ -68,17 +78,20 @@ class Value:
 
     def log(self):
 
-        out = Value(math.log(self.data), (self, ), 'log')
+        EPSILON = 1e-7
+        clipped_data = max(EPSILON, self.data)
+
+        out = Value(math.log(clipped_data), (self, ), 'log')
 
         def _backward():
-            self.grad += (1 / self.data) * out.grad
+            self.grad += (1 / clipped_data) * out.grad
         out._backward = _backward
 
         return out
 
     def exp(self):
         x = self.data
-        out = Value(np.exp(x), (self, ), 'exp')
+        out = Value(math.exp(x), (self, ), 'exp')
 
         def _backward():
             self.grad += out.data * out.grad
@@ -88,7 +101,7 @@ class Value:
 
     def sigmoid(self):
         x = self.data
-        t = 1 / (1 + (np.exp(-x)))
+        t = 1 / (1 + (math.exp(-x)))
 
         out = Value(t, (self, ), 'sigmoid')
 
