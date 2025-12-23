@@ -22,13 +22,10 @@ class Module:
 
 class Neuron(Module):
 
-    # I want to introduce weight sharing, which means I need to be able to
-    # initialise a neuron with pre defined weights, but leave the bias?
-
+    
     def __init__(self, nin, nonlin=True, **kwargs):
         k = math.sqrt(2 / nin)
 
-        # Initialize weights using a uniform distribution in the range [-k, k]
         self.w = [Value(random.uniform(-k, k)) for _ in range(nin)]
         self.b = Value(random.uniform(-k, k))
         self.nonlin = nonlin
@@ -36,7 +33,6 @@ class Neuron(Module):
 
     def __call__(self, x):
         if isinstance(x, (Value, float, int)):
-            # This is for a single input, likely at the start of a layer
             act = (self.w[0] * x) + self.b
         else:
             act = sum((wi*xi for wi, xi in zip(self.w, x)), self.b)
@@ -57,7 +53,6 @@ class Layer(Module):
         self.neurons = [Neuron(nin, **kwargs) for _ in range(nout)]
 
     def __call__(self, x):
-        # Standard layer behavior
         out = [n(x) for n in self.neurons]
         return out
 
@@ -73,7 +68,6 @@ class MLP(Module):
         sz = [nin] + nouts
         self.layers = []
         if tied_weights_from is None:
-            # Standard MLP initialization
             self.layers = [Layer(
                 sz[i], sz[i+1], nonlin=i != len(nouts)-1, **kwargs) for i in range(len(nouts))]
 
@@ -133,22 +127,18 @@ class VariationalAutoEncoder(Module):
         self.latent_dim = latent_dim
         self.act_func = act_func
 
-        # Encoder outputs 2 * latent_dim: mean and log-variance for each dimension
-        # Last layer outputs 2*latent_dim (no activation on this layer)
+        # encoder ouputs mean and log-variance for each dimension
         self.encoder = MLP(in_embeds, hidden_layers + [2 * latent_dim])
         self.decoder = MLP(latent_dim, list(
             reversed(hidden_layers)) + [in_embeds], activate=act_func)
 
-    def encode(self, x):
-        """Encode input to mean and log-variance"""
+    def encode(self, x): 
         encoded = self.encoder(x)
 
-        # Ensure encoded is a list
         if not isinstance(encoded, list):
             encoded = [encoded]
 
-        # Split the output into mean and log_var
-        # encoded should be a list of 2*latent_dim values
+        # split output into mean and log_var
         if len(encoded) != 2 * self.latent_dim:
             raise ValueError(
                 f"Encoder output dimension {len(encoded)} doesn't match expected 2*latent_dim={2*self.latent_dim}")
@@ -159,18 +149,9 @@ class VariationalAutoEncoder(Module):
         return mu, log_var
 
     def reparameterize(self, mu, log_var):
-        """
-        Reparameterization trick: z = mu + sigma * epsilon
-        where epsilon ~ N(0,1) and sigma = exp(0.5 * log_var)
-
-        Note: epsilon is sampled and treated as a constant during backprop
-        """
-        # Sample epsilon from standard normal (treated as constant in backprop)
-        # Using Value.constant() ensures gradients don't flow to epsilon
-        epsilon = [Value.constant(random.gauss(0, 1)) for _ in range(len(mu))]
-
-        # Compute sigma = exp(0.5 * log_var) more efficiently
-        # sigma = exp(0.5 * log_var) = sqrt(exp(log_var))
+        # epsilon comes from normal distribution, did not add to parameter list so wont be included in backprop
+        epsilon = [Value.constant(random.gauss(0, 1)) for _ in range(len(mu))]        
+        
         sigma = [(log_var_i * 0.5).exp() for log_var_i in log_var]
 
         # z = mu + sigma * epsilon
@@ -180,11 +161,9 @@ class VariationalAutoEncoder(Module):
         return z
 
     def decode(self, z):
-        """Decode latent sample to reconstruction"""
         return self.decoder(z)
 
     def __call__(self, x):
-        """Forward pass: encode, sample, decode"""
         mu, log_var = self.encode(x)
         z = self.reparameterize(mu, log_var)
         reconstruction = self.decode(z)
