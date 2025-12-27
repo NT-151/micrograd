@@ -21,6 +21,9 @@ class Module:
 
 class Neuron(Module):
 
+    # I want to introduce weight sharing, which means I need to be able to
+    # initialise a neuron with pre defined weights, but leave the bias?
+
     def __init__(self, nin, nonlin=True, **kwargs):
         k = math.sqrt(2 / nin)
 
@@ -31,7 +34,7 @@ class Neuron(Module):
 
     def __call__(self, x):
         if isinstance(x, (Value, float, int)):
-
+            # This is for a single input, likely at the start of a layer
             act = (self.w[0] * x) + self.b
         else:
             act = sum((wi*xi for wi, xi in zip(self.w, x)), self.b)
@@ -66,8 +69,10 @@ class MLP(Module):
     def __init__(self, nin, nouts, **kwargs):
         sz = [nin] + nouts
         self.layers = []
-        self.layers = [Layer(sz[i], sz[i+1], nonlin=i !=
-                             len(nouts)-1, **kwargs) for i in range(len(nouts))]
+        if tied_weights_from is None:
+            # Standard MLP initialization
+            self.layers = [Layer(
+                sz[i], sz[i+1], nonlin=i != len(nouts)-1, **kwargs) for i in range(len(nouts))]
 
     def __call__(self, x):
         for layer in self.layers:
@@ -131,13 +136,13 @@ class VariationalAutoEncoder(Module):
             reversed(hidden_layers)) + [in_embeds], activate=act_func)
 
     def encode(self, x):
-        """Encode input to mean and log-variance"""
         encoded = self.encoder(x)
 
-        # Ensure encoded is a list
         if not isinstance(encoded, list):
             encoded = [encoded]
 
+        # Split the output into mean and log_var
+        # encoded should be a list of 2*latent_dim values
         if len(encoded) != 2 * self.latent_dim:
             raise ValueError(
                 f"Encoder output dimension {len(encoded)} doesn't match expected 2*latent_dim={2*self.latent_dim}")
@@ -148,9 +153,18 @@ class VariationalAutoEncoder(Module):
         return mu, log_var
 
     def reparameterize(self, mu, log_var):
+        """
+        Reparameterization trick: z = mu + sigma * epsilon
+        where epsilon ~ N(0,1) and sigma = exp(0.5 * log_var)
 
-        # sample epsilon from standard normal (treated as constant in backprop as it is not added to parameter list)
+        Note: epsilon is sampled and treated as a constant during backprop
+        """
+        # Sample epsilon from standard normal (treated as constant in backprop)
+        # Using Value.constant() ensures gradients don't flow to epsilon
         epsilon = [Value.constant(random.gauss(0, 1)) for _ in range(len(mu))]
+
+        # Compute sigma = exp(0.5 * log_var) more efficiently
+        # sigma = exp(0.5 * log_var) = sqrt(exp(log_var))
         sigma = [(log_var_i * 0.5).exp() for log_var_i in log_var]
 
         # z = mu + sigma * epsilon
