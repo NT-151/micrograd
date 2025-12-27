@@ -21,9 +21,6 @@ class Module:
 
 class Neuron(Module):
 
-    # I want to introduce weight sharing, which means I need to be able to
-    # initialise a neuron with pre defined weights, but leave the bias?
-
     def __init__(self, nin, nonlin=True, **kwargs):
         k = math.sqrt(2 / nin)
 
@@ -34,7 +31,6 @@ class Neuron(Module):
 
     def __call__(self, x):
         if isinstance(x, (Value, float, int)):
-            # This is for a single input, likely at the start of a layer
             act = (self.w[0] * x) + self.b
         else:
             act = sum((wi*xi for wi, xi in zip(self.w, x)), self.b)
@@ -69,10 +65,8 @@ class MLP(Module):
     def __init__(self, nin, nouts, **kwargs):
         sz = [nin] + nouts
         self.layers = []
-        if tied_weights_from is None:
-            # Standard MLP initialization
-            self.layers = [Layer(
-                sz[i], sz[i+1], nonlin=i != len(nouts)-1, **kwargs) for i in range(len(nouts))]
+        self.layers = [Layer(
+            sz[i], sz[i+1], nonlin=i != len(nouts)-1, **kwargs) for i in range(len(nouts))]
 
     def __call__(self, x):
         for layer in self.layers:
@@ -141,8 +135,7 @@ class VariationalAutoEncoder(Module):
         if not isinstance(encoded, list):
             encoded = [encoded]
 
-        # Split the output into mean and log_var
-        # encoded should be a list of 2*latent_dim values
+        # split the output into mean and log_var
         if len(encoded) != 2 * self.latent_dim:
             raise ValueError(
                 f"Encoder output dimension {len(encoded)} doesn't match expected 2*latent_dim={2*self.latent_dim}")
@@ -153,18 +146,9 @@ class VariationalAutoEncoder(Module):
         return mu, log_var
 
     def reparameterize(self, mu, log_var):
-        """
-        Reparameterization trick: z = mu + sigma * epsilon
-        where epsilon ~ N(0,1) and sigma = exp(0.5 * log_var)
-
-        Note: epsilon is sampled and treated as a constant during backprop
-        """
-        # Sample epsilon from standard normal (treated as constant in backprop)
-        # Using Value.constant() ensures gradients don't flow to epsilon
+        # sample epsilon from gauss which is treated as constant in backprop
         epsilon = [Value.constant(random.gauss(0, 1)) for _ in range(len(mu))]
 
-        # Compute sigma = exp(0.5 * log_var) more efficiently
-        # sigma = exp(0.5 * log_var) = sqrt(exp(log_var))
         sigma = [(log_var_i * 0.5).exp() for log_var_i in log_var]
 
         # z = mu + sigma * epsilon
@@ -190,13 +174,3 @@ class VariationalAutoEncoder(Module):
 
     def __repr__(self):
         return f"VAE(encoder: {len(self.encoder.layers)} layers, decoder: {len(self.decoder.layers)} layers, latent_dim: {self.latent_dim})"
-
-
-auto = AutoEncoder(
-    in_embeds=784,  # input dimension
-    hidden_layers=[312, 128, 64],  # len = number of layers, i = size of layer
-    latent_dim=8,  # compressed layer dimensions
-    act_func=Value.sigmoid,  # activation function for final decoder layer
-)
-
-print(len(auto.parameters()))
