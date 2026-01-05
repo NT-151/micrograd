@@ -1,12 +1,8 @@
 """
 Heavily inspired by https://github.com/joelgrus/joelnet/blob/master/joelnet/data.py
 """
-import numpy as np
 import random
 from engine import Value
-from nn import AutoEncoder
-
-# Batch = NamedTuple("Batch", [("inputs", List[Vector]), ("targets", Vector)])
 
 
 class BatchIterator:
@@ -29,11 +25,3 @@ class BatchIterator:
             batch_targets = self.targets[start:end]
             yield (Value(batch_inputs), Value(batch_targets))
 
-# hey = Value(np.random.normal(size=(100, 15)))
-# auto = AutoEncoder(in_embeds=10, hidden_layers=[
-#                    8, 6, 4], latent_dim=2, act_func=Value.sigmoid)
-
-# data_iterator = BatchIterator(hey, hey, 12)
-
-# for batch in data_iterator():
-#     auto(batch[0])

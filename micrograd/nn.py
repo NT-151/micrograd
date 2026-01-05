@@ -19,8 +19,6 @@ class Linear(Module):
         self.b = Value(np.full((nout,), 0))
 
     def __call__(self, x):
-        # print("this is input", x.shape)
-        # print("this is weights", self.W.data.shape)
         return (x @ self.W) + self.b
 
     def parameters(self):

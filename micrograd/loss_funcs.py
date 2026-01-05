@@ -22,5 +22,4 @@ def vae_loss(recon, target, mu, log_var, beta=0.002):
 
     total_loss = recon_loss + beta * kl
 
-    # print("recon:", float(recon_loss.data), "kl:", float(kl.data), "total:", float(total_loss.data))
     return total_loss

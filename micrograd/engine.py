@@ -1,10 +1,7 @@
 import numpy as np
-import random
-
 
 class Value:
     def __init__(self, data, _children=(), _op=''):
-        # print("this is data", type(data))
         self.data = np.asarray(data, dtype=float) if not (
             isinstance(data, np.ndarray)) else data
         self.grad = np.zeros_like(self.data)
