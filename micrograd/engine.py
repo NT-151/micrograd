@@ -1,36 +1,42 @@
-import math
 import numpy as np
 import random
 
-np.random.seed(1337)
-random.seed(1337)
-np.set_printoptions(suppress=True)
-
 
 class Value:
-    """ stores a single scalar value and its gradient """
-
     def __init__(self, data, _children=(), _op=''):
-        self.data = data
-        self.grad = 0
-        # internal variables used for autograd graph construction
+        # print("this is data", type(data))
+        self.data = np.asarray(data, dtype=float) if not (
+            isinstance(data, np.ndarray)) else data
+        self.grad = np.zeros_like(self.data)
         self._backward = lambda: None
         self._prev = set(_children)
         self._op = _op  # the op that produced this node, for graphviz / debugging / etc
 
+    @staticmethod
+    def unbroadcast(grad, shape):
+        grad = np.asarray(grad)
+        # remove leading dims
+        while grad.ndim > len(shape):
+            grad = grad.sum(axis=0)
+        # sum over axes where original had dim 1
+        for i, (g, s) in enumerate(zip(grad.shape, shape)):
+            if s == 1 and g != 1:
+                grad = grad.sum(axis=i, keepdims=True)
+        return grad
+
     @classmethod
     def constant(cls, data):
-        return cls(data, _op='constant')
+        return cls(np.asarray(data), _op='constant')
 
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data + other.data, (self, other), '+')
 
         def _backward():
-            self.grad += out.grad
-            other.grad += out.grad
+            self.grad += Value.unbroadcast(out.grad, self.data.shape)
+            other.grad = np.add(other.grad, Value.unbroadcast(
+                out.grad, other.data.shape), out=other.grad, casting='unsafe')
         out._backward = _backward
-
         return out
 
     def __mul__(self, other):
@@ -38,11 +44,11 @@ class Value:
         out = Value(self.data * other.data, (self, other), '*')
 
         def _backward():
-            self.grad += other.data * out.grad
-            if other._op != 'constant':
-                other.grad += self.data * out.grad
+            self.grad += Value.unbroadcast(other.data *
+                                           out.grad, self.data.shape)
+            other.grad += Value.unbroadcast(self.data *
+                                            out.grad, other.data.shape)
         out._backward = _backward
-
         return out
 
     def __pow__(self, other):
@@ -56,32 +62,30 @@ class Value:
 
         return out
 
-    def relu(self):
-        out = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
+    def __getitem__(self, idx):
+        out = Value(self.data[idx], (self,), 'slice')
 
         def _backward():
-            self.grad += (out.data > 0) * out.grad
-        out._backward = _backward
+            grad = np.zeros_like(self.data)
+            grad[idx] = out.grad
+            self.grad += grad
 
+        out._backward = _backward
         return out
 
-    # fix dead neuron problem
-    def leaky_relu(self):
-        out = Value(self.data * 0.01 if self.data <
-                    0 else self.data, (self,), 'ReLU')
+    def relu(self):
+        out = Value(np.maximum(0, self.data), (self,), 'relu')
 
         def _backward():
-            local_grad = 1.0 if self.data > 0 else 0.01
-            self.grad += local_grad * out.grad
+            self.grad += (self.data > 0) * out.grad
         out._backward = _backward
         return out
 
     def log(self):
-
         EPSILON = 1e-7
-        clipped_data = max(EPSILON, self.data)
+        clipped_data = np.maximum(EPSILON, self.data)
 
-        out = Value(math.log(clipped_data), (self, ), 'log')
+        out = Value(np.log(clipped_data), (self, ), 'log')
 
         def _backward():
             self.grad += (1 / clipped_data) * out.grad
@@ -91,7 +95,7 @@ class Value:
 
     def exp(self):
         x = self.data
-        out = Value(math.exp(x), (self, ), 'exp')
+        out = Value(np.exp(x), (self, ), 'exp')
 
         def _backward():
             self.grad += out.data * out.grad
@@ -101,7 +105,7 @@ class Value:
 
     def sigmoid(self):
         x = self.data
-        t = 1 / (1 + (math.exp(-x)))
+        t = 1 / (1 + (np.exp(-x)))
 
         out = Value(t, (self, ), 'sigmoid')
 
@@ -110,6 +114,42 @@ class Value:
         out._backward = _backward
 
         return out
+
+    def sum(self, axis=None, keepdims=False):
+        out = Value(np.sum(self.data, axis=axis,
+                    keepdims=keepdims), (self,), 'sum')
+
+        def _backward():
+            g = out.grad
+            if axis is not None and not keepdims:
+                g = np.expand_dims(g, axis=axis)
+            self.grad += np.ones_like(self.data) * g
+        out._backward = _backward
+        return out
+
+    def __matmul__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data @ other.data, (self, other), '@')
+
+        def _backward():
+            a, b, g = self.data, other.data, out.grad
+
+            a2 = a[None, :] if a.ndim == 1 else a
+            b2 = b[:, None] if b.ndim == 1 else b
+            g2 = g[None, :] if g.ndim == 1 else g
+
+            da2 = g2 @ b2.T
+            db2 = a2.T @ g2
+
+            self.grad += da2.reshape(a.shape)
+            other.grad += db2.reshape(b.shape)
+
+        out._backward = _backward
+        return out
+
+    def mean(self, axis=None, keepdims=False):
+        denom = self.data.size if axis is None else self.data.shape[axis]
+        return self.sum(axis=axis, keepdims=keepdims) * (1.0 / denom)
 
     def backward(self):
 
@@ -126,7 +166,7 @@ class Value:
         build_topo(self)
 
         # go one variable at a time and apply the chain rule to get its gradient
-        self.grad = 1
+        self.grad = np.ones_like(self.data)
         for v in reversed(topo):
             v._backward()
 
@@ -136,11 +176,13 @@ class Value:
     def __le__(self, other):
         return self.data <= other.data
 
-    def __gt__(self, other):
-        return self.data > other.data
-
     def __lt__(self, other):
-        return self.data < other.data
+        other_data = other.data if isinstance(other, Value) else other
+        return self.data < other_data
+
+    def __gt__(self, other):
+        other_data = other.data if isinstance(other, Value) else other
+        return self.data > other_data
 
     def __neg__(self):  # -self
         return self * -1

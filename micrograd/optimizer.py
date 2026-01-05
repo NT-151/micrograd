@@ -1,4 +1,4 @@
-from micrograd.engine import Value
+import numpy as np
 
 
 class Optimizer:
@@ -9,7 +9,7 @@ class Optimizer:
 
     def zero_grad(self):
         for p in self.parameters:
-            p.grad = 0
+            p.grad = np.zeros_like(p.data)
 
     def step(self):
         """Take a step of gradient descent"""
@@ -18,12 +18,10 @@ class Optimizer:
 
 
 class SGD(Optimizer):
-    """Stochastic Gradient Descent optimizer"""
-
     def __init__(self, parameters, learning_rate=0.01):
         super().__init__(parameters)
         self.learning_rate = learning_rate
 
     def step(self):
         for p in self.parameters:
-            p.data -= self.learning_rate * p.grad
+            p.data = p.data - (self.learning_rate * p.grad)
