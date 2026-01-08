@@ -1,1 +1,4 @@
 .ipynb_checkpoints/
+env/
+.__init__.py
+__pycahce__/

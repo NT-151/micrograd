@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Value:
     def __init__(self, data, _children=(), _op=''):
         self.data = np.asarray(data, dtype=float) if not (
@@ -15,7 +16,7 @@ class Value:
         # remove leading dims
         while grad.ndim > len(shape):
             grad = grad.sum(axis=0)
-        # sum over axes where original had dim 1
+        # sum over axes where original had dim 1, i.e., the weights and biases
         for i, (g, s) in enumerate(zip(grad.shape, shape)):
             if s == 1 and g != 1:
                 grad = grad.sum(axis=i, keepdims=True)
@@ -24,21 +25,34 @@ class Value:
     @classmethod
     def constant(cls, data):
         return cls(np.asarray(data), _op='constant')
+    
+    @property
+    def T(self):
+        out = Value(self.data.T, (self,), 'T')
+
+        def _backward():
+            self.grad += out.grad.T
+
+        out._backward = _backward
+        return out
 
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
+        
         out = Value(self.data + other.data, (self, other), '+')
+        print(self.data.shape, other.data.shape,out.data.shape,  "in addition")
 
         def _backward():
             self.grad += Value.unbroadcast(out.grad, self.data.shape)
-            other.grad = np.add(other.grad, Value.unbroadcast(
-                out.grad, other.data.shape), out=other.grad, casting='unsafe')
+            other.grad += Value.unbroadcast(out.grad, other.data.shape)
         out._backward = _backward
         return out
 
     def __mul__(self, other):
         other = other if isinstance(other, Value) else Value(other)
+        
         out = Value(self.data * other.data, (self, other), '*')
+        print(self.data.shape, other.data.shape,out.data.shape, "in just standard mul")
 
         def _backward():
             self.grad += Value.unbroadcast(other.data *
@@ -127,13 +141,16 @@ class Value:
     def __matmul__(self, other):
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data @ other.data, (self, other), '@')
+        print(self.data.shape, other.data.shape,out.data.shape, "in mat mul")
 
         def _backward():
             a, b, g = self.data, other.data, out.grad
-
-            a2 = a[None, :] if a.ndim == 1 else a
-            b2 = b[:, None] if b.ndim == 1 else b
-            g2 = g[None, :] if g.ndim == 1 else g
+            
+            # ensure all possible 1d arrays are 2d to ensure consistency
+            # None inserts new axis of length 1 at specified position
+            a2 = a[None, :] if a.ndim == 1 else a # (1,N)
+            b2 = b[:, None] if b.ndim == 1 else b # (N,1)
+            g2 = g[None, :] if g.ndim == 1 else g # (1,N)
 
             da2 = g2 @ b2.T
             db2 = a2.T @ g2
@@ -204,3 +221,25 @@ class Value:
 
     def __repr__(self):
         return f"Value(data={self.data}, grad={self.grad})"
+
+    
+
+
+
+# h = np.array([
+#     [2,3,4],
+#     [1,2,3],
+# ])
+
+# x = np.array([
+#     [1],
+#     [2],
+#     [3]
+# ])
+# print(h.shape)
+# print(x.shape)
+
+# t = h + x
+
+
+# print(t)

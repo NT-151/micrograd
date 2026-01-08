@@ -1,3 +1,7 @@
+import tracemalloc
+import os
+import linecache
+import time
 from engine import Value
 import numpy as np
 
@@ -16,7 +20,8 @@ class Linear(Module):
     def __init__(self, nin, nout):
         k = np.sqrt(2.0 / nin)
         self.W = Value(np.random.uniform(-k, k, (nin, nout)))
-        self.b = Value(np.full((nout,), 0))
+        self.b = Value(np.full((nout,), 0.1))
+        print(self.W.data.shape, self.b.data.shape, "this is in the weights initialisation")
 
     def __call__(self, x):
         return (x @ self.W) + self.b
@@ -116,3 +121,92 @@ class VariationalAutoEncoder(Module):
 
     def parameters(self):
         return self.encoder.parameters() + self.decoder.parameters()
+
+
+pred = MLP(5, [1])
+
+
+# start_time = time.time()
+x = Value([
+    [1.0, 2.0, 3.0, 0.0, 0.2],
+    [0.5, 1.0, 3.0, -2.0, 0.0],
+    [0.0, 0.0, -4.0, 2.0, 3.0],
+    [0.0, 0.0, 0.0, -2.0, 2.5],
+    [0.0, 0.0, 3.0, 4.0, -1.0],
+])
+
+truth = Value([1.0, 0.0, 1.0, 1.0, 1.0])
+
+forward = pred(x)
+
+loss = ((forward - truth)**2).mean()
+
+loss.backward()
+
+def backward(self):
+    # topological order all of the children in the graph
+    topo = []
+    visited = set()
+
+    def build_topo(v):
+        if len(visited) == 10:
+            return
+        if v not in visited:
+            visited.add(v)
+            for child in v._prev:
+                build_topo(child)
+            if len(v.grad.shape) > 1:
+                print(v.grad[0])
+    build_topo(self)
+
+
+backward(loss)
+
+
+# print("--- %s seconds ---" % (time.time() - start_time))
+ 
+
+def display_top(snapshot, key_type='lineno', limit=10):
+    snapshot = snapshot.filter_traces((
+        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+        tracemalloc.Filter(False, "<unknown>"),
+    ))
+    top_stats = snapshot.statistics(key_type)
+
+    print("Top %s lines" % limit)
+    for index, stat in enumerate(top_stats[:limit], 1):
+        frame = stat.traceback[0]
+        print("#%s: %s:%s: %.1f KiB"
+              % (index, frame.filename, frame.lineno, stat.size / 1024))
+        line = linecache.getline(frame.filename, frame.lineno).strip()
+        if line:
+            print('    %s' % line)
+
+    other = top_stats[limit:]
+    if other:
+        size = sum(stat.size for stat in other)
+        print("%s other: %.1f KiB" % (len(other), size / 1024))
+    total = sum(stat.size for stat in top_stats)
+    print("Total allocated size: %.1f KiB" % (total / 1024))
+
+
+# tracemalloc.start()
+
+# pred = MLP(100, [300, 300, 1])
+
+# # start_time = time.time()
+
+# example = Value(np.random.normal(size=(10, 100)))
+
+# truth = Value(np.random.normal(size=(10, 100)))
+
+# forward = pred(example)
+
+# loss = ((forward - truth) ** 2).sum()
+
+# loss.backward()
+
+# snapshot = tracemalloc.take_snapshot()
+# display_top(snapshot)
+
+# print("--- %s seconds ---" % (time.time() - start_time))
