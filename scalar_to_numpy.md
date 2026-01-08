@@ -64,6 +64,7 @@ f:\mathbb{R}^n
 $$
 
 The Jacobian can be defined as:
+
 $$
 J_f(x) = \begin{pmatrix}
 \frac{\partial f_1}{\partial x_1} & \cdots & \frac{\partial f_1}{\partial x_n} \\
