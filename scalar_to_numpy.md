@@ -40,6 +40,7 @@ $$
 \frac{d\mathcal{L}}{d\hat{y}}
 \frac{d\mathcal{\hat{y}}}{d W}
 $$
+
 In code, this typically looks like:
 
 `self.grad += other.data * out.grad` 
@@ -48,7 +49,9 @@ For addition.
 
 When the data stored in each node becomes an ndarray, a node represents
 
-$$f: \mathbb{R}^n \to \mathbb{R}^m$$
+$$
+f: \mathbb{R}^n \to \mathbb{R}^m
+$$
  
 Which implies a Jacobian Matrix for the gradient.
 
